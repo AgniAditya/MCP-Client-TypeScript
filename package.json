@@ -1,0 +1,33 @@
+{
+  "name": "mcp-client-typescript",
+  "version": "1.0.0",
+  "description": "A simple mcp client connectivity with blender mcp server",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev" : "node build/index.js",
+    "build": "tsc && chmod 755 build/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AgniAditya/MCP-Client-TypeScript.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AgniAditya/MCP-Client-TypeScript/issues"
+  },
+  "homepage": "https://github.com/AgniAditya/MCP-Client-TypeScript#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.62.0",
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "dotenv": "^17.2.2",
+    "openai": "^5.20.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.0",
+    "typescript": "^5.9.2"
+  }
+}
