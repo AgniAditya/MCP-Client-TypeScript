@@ -1,9 +1,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import readline from "readline/promises";
 import dotenv from "dotenv";
-import { Tool , MessageParam} from "@anthropic-ai/sdk/resources/messages/messages.mjs";
 import { OpenAI } from "openai/client.js";
+import { connectToBlenderMCPServer } from './blenderMCPServerConnect.js'
+import { jsonformat } from "./blenderTools.js";
 
 dotenv.config();
 
@@ -15,8 +15,6 @@ if (!OPENROUTER_API_KEY) {
 class MCPClient {
     private mcp: Client;
     private openai: OpenAI;
-    private transport: StdioClientTransport | null = null;
-    private tools: Tool[] = [];
 
     constructor() {
         this.openai = new OpenAI({
@@ -26,97 +24,20 @@ class MCPClient {
         this.mcp = new Client({ name: "mcp-client-cli", version: "1.0.0" });
     }
 
-    async connectToServer(serverScriptPath: string) {
-        try {
-            const isJs = serverScriptPath.endsWith(".js");
-            const isPy = serverScriptPath.endsWith(".py");
-
-            if (!isJs && !isPy) {
-                throw new Error("Server script must be a .js or .py file");
-            }
-
-            const command = isPy ? process.platform === "win32" ? "python" : "python3"
-            : process.execPath;
-
-            this.transport = new StdioClientTransport({
-                command,
-                args: [serverScriptPath],
-            });
-            await this.mcp.connect(this.transport);
-
-            const toolsResult = await this.mcp.listTools();
-            this.tools = toolsResult.tools.map((tool) => {
-            return {
-                name: tool.name,
-                description: tool.description,
-                input_schema: tool.inputSchema,
-            };
-            });
-            console.log(
-                "Connected to server with tools:",
-                this.tools.map(({ name }) => name)
-            );
-        } catch (e) {
-            console.log("Failed to connect to MCP server: ", e);
-            throw e;
-        }
-    }
-
     async processQuery(query: string) {
-        const messages: MessageParam[] = [
-            {
-                "role": "user",
-                "content": query,
-            },
-        ];
+        const prefixCommand = "Only generate a JSON format like: "+jsonformat+" and use only avaiable tools in method only if query is related to blender task Query -> "
 
         const response = await this.openai.chat.completions.create({
             model: "deepseek/deepseek-chat-v3.1:free",
             messages: [
             {
                 "role": "user",
-                "content": query
+                "content": prefixCommand + query
             }
             ],
         });
 
-        return response.choices[0].message
-
-        // const finalText = [];
-
-        // for (const content of response.output_text) {
-        //     if (content.type === "text") {
-        //         finalText.push(content.text);
-        //     } else if (content.type === "tool_use") {
-        //         const toolName = content.name;
-        //         const toolArgs = content.input as { [x: string]: unknown } | undefined;
-
-        //         const result = await this.mcp.callTool({
-        //             name: toolName,
-        //             arguments: toolArgs,
-        //         });
-        //         finalText.push(
-        //             `[Calling tool ${toolName} with args ${JSON.stringify(toolArgs)}]`
-        //         );
-
-        //         messages.push({
-        //             role: "user",
-        //             content: result.content as string,
-        //         });
-
-        //         const response = await this.anthropic.messages.create({
-        //             model: "claude-3-5-sonnet-20241022",
-        //             max_tokens: 1000,
-        //             messages,
-        //         });
-
-        //         finalText.push(
-        //             response.content[0].type === "text" ? response.content[0].text : ""
-        //         );
-        //     }
-        // }
-
-        // return finalText.join("\n");
+        return response.choices[0].message.content
     }
 
     async chatLoop() {
@@ -124,7 +45,8 @@ class MCPClient {
             input: process.stdin,
             output: process.stdout,
         });
-
+        const blenderServer = new connectToBlenderMCPServer();
+        const blendertools = await blenderServer.getAvaiableTools();
         try {
             console.log("\nMCP Client Started!");
             console.log("Type your queries or 'quit' to exit.");
@@ -134,8 +56,9 @@ class MCPClient {
                 if (message.toLowerCase().trim() === "quit") {
                     break;
                 }
-                const response = await this.processQuery(message);
-                console.log("\n" + response.content);
+                const instructions = await this.processQuery(message+"\nBlender Tools"+blendertools);
+                console.log(JSON.stringify(instructions))
+                await blenderServer.sendQuery(JSON.stringify(instructions));
             }
         } finally {
             rl.close();
@@ -148,13 +71,12 @@ class MCPClient {
 }
 
 async function main() {
-    if (process.argv.length < 3) {
-        console.log("Usage: node index.ts C:\\Program Files\\Blender Foundation\\Blender 4.4\\blender.exe");
+    if (process.argv.length < 2) {
+        console.log("Usage: node index.ts");
         return;
     }
     const mcpClient = new MCPClient();
     try {
-        // await mcpClient.connectToServer(process.argv[2]);
         await mcpClient.chatLoop();
     } finally {
         await mcpClient.cleanup();
